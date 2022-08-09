@@ -231,12 +231,11 @@ def similar_products():
 
         app.logger.debug(json.dumps(results))
 
-        found_items = []
+        found_items = [
+            {'itemId': item['_id']} for item in results['hits']['hits']
+        ]
 
-        for item in results['hits']['hits']:
-            found_items.append({
-                'itemId': item['_id']
-            })
+
         return json.dumps(found_items)
 
     except NotFoundError as e:

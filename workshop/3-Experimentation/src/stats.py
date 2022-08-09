@@ -35,8 +35,7 @@ def pooled_prob(N_A, N_B, X_A, X_B):
 def pooled_SE(N_A, N_B, X_A, X_B):
     """Returns the pooled standard error for two samples"""
     p_hat = pooled_prob(N_A, N_B, X_A, X_B)
-    SE = np.sqrt(p_hat * (1 - p_hat) * (1 / N_A + 1 / N_B))
-    return SE
+    return np.sqrt(p_hat * (1 - p_hat) * (1 / N_A + 1 / N_B))
 
 
 def confidence_interval(sample_mean=0, sample_std=1, sample_size=1,
@@ -55,13 +54,8 @@ def z_val(sig_level=0.05, two_tailed=True):
     z_dist = scs.norm()
     if two_tailed:
         sig_level = sig_level/2
-        area = 1 - sig_level
-    else:
-        area = 1 - sig_level
-
-    z = z_dist.ppf(area)
-
-    return z
+    area = 1 - sig_level
+    return z_dist.ppf(area)
 
 
 def ab_dist(stderr, d_hat=0, group_type='control'):
@@ -83,9 +77,7 @@ def ab_dist(stderr, d_hat=0, group_type='control'):
     elif group_type == 'test':
         sample_mean = d_hat
 
-    # create a normal distribution which is dependent on mean and std dev
-    dist = scs.norm(sample_mean, stderr)
-    return dist
+    return scs.norm(sample_mean, stderr)
 
 
 def min_sample_size(bcr, mde, power=0.8, sig_level=0.05):
@@ -124,10 +116,13 @@ def min_sample_size(bcr, mde, power=0.8, sig_level=0.05):
     # average of probabilities from both groups
     pooled_prob = (bcr + bcr+mde) / 2
 
-    min_N = (2 * pooled_prob * (1 - pooled_prob) * (Z_beta + Z_alpha)**2
-             / mde**2)
-
-    return min_N
+    return (
+        2
+        * pooled_prob
+        * (1 - pooled_prob)
+        * (Z_beta + Z_alpha) ** 2
+        / mde**2
+    )
 
 
 def p_val(N_A, N_B, p_A, p_B):

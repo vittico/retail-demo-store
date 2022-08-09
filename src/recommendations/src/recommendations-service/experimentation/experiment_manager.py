@@ -44,8 +44,7 @@ class ExperimentManager:
         """ Returns the active experiment for the given feature """
         # 1. If Optimizely is configured for this deployment, check for active Optimizely experiment.
         if self.is_optimizely_configured():
-            config = optimizely_sdk.get_optimizely_config()
-            if config:
+            if config := optimizely_sdk.get_optimizely_config():
                 if feature in config.features_map:
                     optimizely_feature = config.features_map[feature]
                     experiment_keys = optimizely_feature.experiments_map.keys()
@@ -60,17 +59,15 @@ class ExperimentManager:
                                 'variations': []}
                         return OptimizelyFeatureTest(**data)
 
-        # 2. Check for active Evidently experiment.
-        evidently_experiment = EvidentlyFeatureResolver().evaluate_feature(user_id, feature)
-        if evidently_experiment:
+        if evidently_experiment := EvidentlyFeatureResolver().evaluate_feature(
+            user_id, feature
+        ):
             return evidently_experiment
 
         # 3. Lastly, check for an active built-in experiment.
         experiment = None
 
-        table = self.__get_table()
-
-        if table:
+        if table := self.__get_table():
             log.debug(f'ExperimentManager - querying {table.table_name} for active experiments for {feature}')
 
             # Get active experiments for the feature.
@@ -86,10 +83,12 @@ class ExperimentManager:
                 log.debug(f'ExperimentManager - {experiment_count} active experiments found for feature {feature}')
 
                 experiment_type = experiment_config['type']
-                experiment_class = ExperimentManager.__experiments.get(experiment_type)
-                if not experiment_class:
+                if experiment_class := ExperimentManager.__experiments.get(
+                    experiment_type
+                ):
+                    experiment = experiment_class(table, **experiment_config)
+                else:
                     raise ValueError(f'Experiment class for type {experiment_type} could not be found')
-                experiment = experiment_class(table, **experiment_config)
             else:
                 log.debug(f'ExperimentManager - no active experiments for feature {feature}')
 
@@ -117,11 +116,13 @@ class ExperimentManager:
         if response.get('Item'):
             experiment_config = response['Item']
             experiment_type = experiment_config['type']
-            experiment_class = ExperimentManager.__experiments.get(experiment_type)
-            if not experiment_class:
-                raise ValueError(f'Experiment class for type {experiment_type} could not be found')
-            experiment = experiment_class(table, **experiment_config)
+            if experiment_class := ExperimentManager.__experiments.get(
+                experiment_type
+            ):
+                experiment = experiment_class(table, **experiment_config)
 
+            else:
+                raise ValueError(f'Experiment class for type {experiment_type} could not be found')
         return experiment
 
     def default_tracker(self):
@@ -149,11 +150,7 @@ class ExperimentManager:
             log.debug('ExperimentManager - looking up experiment strategy table name from SSM')
             response = ssm.get_parameter(Name='retaildemostore-experiment-strategy-table-name')
 
-            if response['Parameter']['Value']:
-                ExperimentManager.__table_name = response['Parameter']['Value']
-            else:
-                ExperimentManager.__table_name = 'NONE'
-
+            ExperimentManager.__table_name = response['Parameter']['Value'] or 'NONE'
             log.debug(f'ExperimentManager - resolved experiment strategy table name to: {ExperimentManager.__table_name}')
 
         return dynamodb.Table(ExperimentManager.__table_name) if ExperimentManager.__table_name != 'NONE' else None

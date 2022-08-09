@@ -67,10 +67,7 @@ class DefaultProductResolver(Resolver):
         """
         product_id = kwargs.get('product_id')
 
-        num_results = 10
-        if kwargs.get('num_results'):
-            num_results = int(kwargs['num_results'])
-
+        num_results = int(kwargs['num_results']) if kwargs.get('num_results') else 10
         items = []
 
         category = None
@@ -90,24 +87,21 @@ class DefaultProductResolver(Resolver):
             # Product belongs to a category so get list of products in same category
             url = f'http://{self.products_service_host}:{self.products_service_port}/products/category/{category}?fullyQualifyImageUrls={self.fully_qualify_image_urls}'
             log.debug('DefaultProductResolver - getting products for category %s', url)
-            response = requests.get(url)
         else:
             # Product not specified or does not belong to a category so fallback to featured products
             url = f'http://{self.products_service_host}:{self.products_service_port}/products/featured?fullyQualifyImageUrls={self.fully_qualify_image_urls}'
             log.debug('DefaultProductResolver - getting featured products %s', url)
-            response = requests.get(url)
-
-        if response.ok:
-            # Create response making sure not to include current product
-            for product in response.json():
-                if product['id'] != product_id:
-                    items.append({'itemId': str(product['id'])})
-
-                    if len(items) >= num_results:
-                        break
-        else:
+        response = requests.get(url)
+        if not response.ok:
             raise Exception(f'Error calling products service: {response.status_code}: {response.reason}')
 
+        # Create response making sure not to include current product
+        for product in response.json():
+            if product['id'] != product_id:
+                items.append({'itemId': str(product['id'])})
+
+                if len(items) >= num_results:
+                    break
         return items
 
 class SearchSimilarProductsResolver(Resolver):
@@ -148,23 +142,19 @@ class SearchSimilarProductsResolver(Resolver):
         if not product_id:
             raise Exception('product_id is required')
 
-        num_results = 10
-        if kwargs.get('num_results'):
-            num_results = int(kwargs['num_results'])
-
+        num_results = int(kwargs['num_results']) if kwargs.get('num_results') else 10
         url = f'http://{self.search_service_host}:{self.search_service_port}/similar/products?productId={product_id}'
         log.debug('SearchSimilarProductsResolver - getting similar products %s', url)
         response = requests.get(url)
 
         items = []
 
-        if response.ok:
-            items = response.json()
-            if len(items) > num_results:
-                items = items[:num_results]
-        else:
+        if not response.ok:
             raise Exception(f'Error calling products service: {response.status_code}: {response.reason}')
 
+        items = response.json()
+        if len(items) > num_results:
+            items = items[:num_results]
         return items
 
 
@@ -197,8 +187,9 @@ class PersonalizeRecommendationsResolver(Resolver):
         num_results = kwargs.get('num_results')
         filter_arn = kwargs.get('filter_arn')
 
-        is_recommender = self.inference_arn.split(':')[5].startswith('recommender/')
-        if is_recommender:
+        if is_recommender := self.inference_arn.split(':')[5].startswith(
+            'recommender/'
+        ):
             log.info('Calling recommender %s', self.inference_arn)
             params['recommenderArn'] = self.inference_arn
         else:
@@ -251,10 +242,7 @@ class HttpResolver(Resolver):
     def get_items(self, **kwargs):
         user_id = kwargs.get('user_id')
         item_id = kwargs.get('product_id')
-        num_results = 10
-        if kwargs.get('num_results'):
-            num_results = int(kwargs['num_results'])
-
+        num_results = int(kwargs['num_results']) if kwargs.get('num_results') else 10
         params = {}
 
         if user_id:
@@ -265,30 +253,25 @@ class HttpResolver(Resolver):
             params[self.num_results_parameter_name] = num_results
 
         url = self.base_url
-        if '?' in url:
-            url += '&'
-        else:
-            url += '?'
-
+        url += '&' if '?' in url else '?'
         url += urllib.parse.urlencode(params)
 
-        log.debug('HttpResolver - calling ' + url)
+        log.debug(f'HttpResolver - calling {url}')
         response = requests.get(url)
 
         items = []
 
-        if response.ok:
-            # This logic assumes we need to do some mapping from the endpoint
-            # to the expected response. In this case, we're assuming that the
-            # endpoint returns a list of 'id' which we need to map to 'itemId'.
-            for item in response.json():
-                items.append({'itemId': str(item['id'])})
-
-                if len(items) >= num_results:
-                    break
-        else:
+        if not response.ok:
             raise Exception(f'Error calling HTTP endpoint service: {response.status_code}: {response.reason}')
 
+        # This logic assumes we need to do some mapping from the endpoint
+        # to the expected response. In this case, we're assuming that the
+        # endpoint returns a list of 'id' which we need to map to 'itemId'.
+        for item in response.json():
+            items.append({'itemId': str(item['id'])})
+
+            if len(items) >= num_results:
+                break
         return items
 
 
@@ -308,7 +291,7 @@ class PersonalizeRankingResolver(Resolver):
         # Optionally support filter specified at resolver creation.
         self.filter_arn = params.get('filter_arn')
 
-        self.context = params.get('context', None)
+        self.context = params.get('context')
 
     def get_items(self, **kwargs):
         """ Returns reranking items from an Amazon Personalize campaign trained with Personalized-Ranking recipe
@@ -337,8 +320,7 @@ class PersonalizeRankingResolver(Resolver):
         elif self.context is not None:
             params['context'] = self.context
 
-        filter_arn = kwargs.get('filter_arn')
-        if filter_arn:
+        if filter_arn := kwargs.get('filter_arn'):
             params['filterArn'] = filter_arn
         elif self.filter_arn:
             params['filterArn'] = self.filter_arn
@@ -373,17 +355,10 @@ class RankingProductsNoOpResolver(Resolver):
             user_id - ID for the user for which to rerank items (required for Personalized-Ranking recipe)
             product_list - list of product IDs to rerank for the user
         """
-        input_list = kwargs.get('product_list')
-
-        if not input_list:
+        if input_list := kwargs.get('product_list'):
+            return [{'itemId': item_id} for item_id in input_list]
+        else:
             raise Exception('product_list is required')
-
-        # Reformat response as an array of dict with 'itemId' key to match what Personalize would return.
-        echo_items = []
-        for item_id in input_list:
-            echo_items.append({'itemId': item_id})
-
-        return echo_items
 
 class PersonalizeContextComparePickResolver(Resolver):
     """ Provides personalized ranking of products from an Amazon Personalize campaign
@@ -450,11 +425,7 @@ class RandomPickResolver(Resolver):
         shuffle(ranked_items)
         ranked_items = ranked_items[:top_n]
 
-        echo_items = []
-        for item_id in ranked_items:
-            echo_items.append({'itemId': item_id})
-
-        return echo_items
+        return [{'itemId': item_id} for item_id in ranked_items]
 
 
 class ResolverFactory:
@@ -479,10 +450,10 @@ class ResolverFactory:
     def get(type, **params):
         """ Returns an instance of a resolver given its type and initialization arguments """
         log.debug('ResolverFactory - resolving type/params %s/%s', type, params)
-        resolver = ResolverFactory.__resolvers.get(type)
-        if not resolver:
+        if resolver := ResolverFactory.__resolvers.get(type):
+            return resolver(**params)
+        else:
             raise ValueError(type)
-        return resolver(**params)
 
 # Register resolvers with factory
 

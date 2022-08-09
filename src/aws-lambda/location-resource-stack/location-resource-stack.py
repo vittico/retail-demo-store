@@ -23,21 +23,21 @@ s3 = boto3.resource('s3')
 
 def load_default_geofence_from_s3():
     """ Retrieves GeoJson file containing store Geofence from S3 """
-    return load_json_from_s3(RESOURCE_BUCKET_PATH + 'location_services/store_geofence.json')
+    return load_json_from_s3(
+        f'{RESOURCE_BUCKET_PATH}location_services/store_geofence.json'
+    )
 
 
 def load_json_from_s3(object_key):
     """ Loads a JSON object from S3 and returns it as a Python dict """
     file_obj = s3.Object(RESOURCE_BUCKET, object_key)
-    object_json = json.loads(file_obj.get()['Body'].read().decode('utf-8'))
-    return object_json
+    return json.loads(file_obj.get()['Body'].read().decode('utf-8'))
 
 
 def get_random_string(length):
     """ Generates a random string of upper & lower case letters. """
     letters = string.ascii_letters
-    rand_string = ''.join(random.choice(letters) for i in range(length))
-    return rand_string
+    return ''.join(random.choice(letters) for _ in range(length))
 
 
 def get_geofence_collection_arn(region, account_id, collection_name):
@@ -91,7 +91,7 @@ def create(event, context):
     create_default_geofence = event['ResourceProperties']['CreateDefaultGeofence'].lower() == 'true'
 
     # Generate the resource name to be used for all Location resources
-    resource_name = stack_name + '-' + get_random_string(8)
+    resource_name = f'{stack_name}-{get_random_string(8)}'
     helper.PhysicalResourceId = resource_name
     helper.Data.update({'LocationResourceName': resource_name})
 

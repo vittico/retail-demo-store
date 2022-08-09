@@ -81,5 +81,5 @@ def test_get_recommendations_with_fullyQualifyImageUrls_should_return_image_url(
     response = get_request_assert(recommendations_api_url, endpoint, schemas_path, params)
     recommendation_resp_obj = response.json()
     image_field = recommendation_resp_obj[0]["product"]["image"]
-    
+
     assert_that(image_field).starts_with('http://')

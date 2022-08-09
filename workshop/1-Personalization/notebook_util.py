@@ -25,10 +25,14 @@ def get_notebook_instance_tags() -> list:
 
 def lookup_uid() -> str:
     """ Returns the value of the 'Uid' tag from the current notebook instance """
-    for tag in get_notebook_instance_tags():
-        if tag['Key'] == 'Uid':
-            return tag['Value']
-    return None
+    return next(
+        (
+            tag['Value']
+            for tag in get_notebook_instance_tags()
+            if tag['Key'] == 'Uid'
+        ),
+        None,
+    )
 
 def lookup_resource_bucket_and_path() -> tuple:
     """ 

@@ -22,11 +22,7 @@ input_request_body = read_file(request_bodies_path, "/choose_discounted")
 
 
 def count_discounted(items):
-    count = 0
-    for item in items:
-        if item["discounted"]:
-            count += 1
-    return count
+    return sum(bool(item["discounted"]) for item in items)
 
 
 def test_post_choose_discounted_should_return_with_correct_schema():

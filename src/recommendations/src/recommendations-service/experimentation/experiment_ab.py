@@ -39,9 +39,7 @@ class ABExperiment(BuiltInExperiment):
         }
         items = variation.resolver.get_items(**resolve_params)
 
-        # Inject experiment details into recommended item list.
-        rank = 1
-        for item in items:
+        for rank, item in enumerate(items, start=1):
             correlation_id = self._create_correlation_id(user_id, variation_idx, rank)
 
             item_experiment = {
@@ -58,11 +56,9 @@ class ABExperiment(BuiltInExperiment):
                 'experiment': item_experiment
             })
 
-            rank += 1
-
         if tracker is not None:
             # Detailed tracking of exposure.
-            timestamp = datetime.now() if not timestamp else timestamp
+            timestamp = timestamp or datetime.now()
             event = {
                 'event_type': 'Experiment Exposure',
                 'event_timestamp': int(round(timestamp.timestamp() * 1000)),
@@ -94,6 +90,4 @@ class ABExperiment(BuiltInExperiment):
 
         hash_str = f'experiments.{self.feature}.{self.name}.{user_id}'.encode('ascii')
         hash_int = int(hashlib.sha1(hash_str).hexdigest()[:15], 16)
-        index = hash_int % len(self.variations)
-
-        return index
+        return hash_int % len(self.variations)

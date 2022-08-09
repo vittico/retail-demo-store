@@ -64,7 +64,7 @@ class TestExperiments(unittest.TestCase):
 
         self.assertEqual(experiment.method, exp_config['method'])
 
-        list_of_item_lists = [[] for x in range(2)]
+        list_of_item_lists = [[] for _ in range(2)]
         list_of_item_lists[0] = [ {'itemId':'a'}, {'itemId':'b'}, {'itemId':'c'}, {'itemId':'d'}, {'itemId':'g'}, {'itemId':'h'}, {'itemId':'l'}, {'itemId':'m'}, {'itemId':'n'}]
         list_of_item_lists[1] = [ {'itemId':'b'}, {'itemId':'e'}, {'itemId':'a'}, {'itemId':'f'}, {'itemId':'g'}, {'itemId':'h'}, {'itemId':'x'}, {'itemId':'y'}, {'itemId':'z'}]
 
@@ -94,7 +94,7 @@ class TestExperiments(unittest.TestCase):
 
         self.assertEqual(experiment.method, exp_config['method'])
 
-        list_of_item_lists = [[] for x in range(2)]
+        list_of_item_lists = [[] for _ in range(2)]
         list_of_item_lists[0] = [ {'itemId':'a'}, {'itemId':'b'}, {'itemId':'c'}, {'itemId':'d'}, {'itemId':'g'}, {'itemId':'h'}, {'itemId':'l'}, {'itemId':'m'}, {'itemId':'n'}]
         list_of_item_lists[1] = [ {'itemId':'b'}, {'itemId':'e'}, {'itemId':'a'}, {'itemId':'f'}, {'itemId':'g'}, {'itemId':'h'}, {'itemId':'x'}, {'itemId':'y'}, {'itemId':'z'}]
 

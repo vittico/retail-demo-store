@@ -98,12 +98,9 @@ class EvidentlyFeatureResolver:
         return EvidentlyExperiment(**experiment_config)
 
     def _call_evidently_evaluate_features(self, user_id: str) -> List[Dict]:
-        requests = []
-        for feature in FEATURE_NAMES:
-            requests.append({
-                'entityId': user_id,
-                'feature': feature
-            })
+        requests = [
+            {'entityId': user_id, 'feature': feature} for feature in FEATURE_NAMES
+        ]
 
         response = evidently.batch_evaluate_feature(
             project=project_name,

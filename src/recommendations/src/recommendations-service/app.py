@@ -262,11 +262,7 @@ def get_products(feature, user_id, current_item_id, num_results, default_inferen
         if product is not None and 'experiment' in item and 'url' in product:
             # Append the experiment correlation ID to the product URL so it gets tracked if used by client.
             product_url = product.get('url')
-            if '?' in product_url:
-                product_url += '&'
-            else:
-                product_url += '?'
-
+            product_url += '&' if '?' in product_url else '?'
             product_url += 'exp=' + item['experiment']['correlationId']
 
             product['url'] = product_url
@@ -368,8 +364,7 @@ def related():
     if filter_ssm == filter_include_categories_param_name:
         category = request.args.get('currentItemCategory')
         if not category:
-            products = fetch_product_details(current_item_id)
-            if products:
+            if products := fetch_product_details(current_item_id):
                 category = products[0]['category']
 
         filter_values = { "CATEGORIES": f"\"{category}\"" }
@@ -403,10 +398,14 @@ def related():
             app.logger.info('Reranking related items to personalize order for user %s', user_id)
             items, resp_headers = get_ranking(user_id, items, feature = None, resp_headers = resp_headers)
 
-            items = items[0:num_results]    # Trim back down to the requested number of items.
+            items = items[:num_results]
 
-        resp = Response(json.dumps(items, cls=CompatEncoder), content_type = 'application/json', headers = resp_headers)
-        return resp
+        return Response(
+            json.dumps(items, cls=CompatEncoder),
+            content_type='application/json',
+            headers=resp_headers,
+        )
+
 
     except Exception as e:
         app.logger.exception('Unexpected error generating related items', e)
@@ -663,11 +662,7 @@ def get_ranking(user_id, items, feature,
             if 'url' in item:
                 # Append the experiment correlation ID to the product URL so it gets tracked if used by client.
                 product_url = item.get('url')
-                if '?' in product_url:
-                    product_url += '&'
-                else:
-                    product_url += '?'
-
+                product_url += '&' if '?' in product_url else '?'
                 product_url += 'exp=' + ranked_item['experiment']['correlationId']
 
                 item['url'] = product_url
@@ -687,9 +682,12 @@ def rerank():
         print('ITEMS', items)
         response_items, resp_headers = get_ranking(user_id, items, feature)
         app.logger.debug(f"Response items for reranking: {response_items}")
-        resp = Response(json.dumps(response_items, cls=CompatEncoder), content_type='application/json',
-                        headers=resp_headers)
-        return resp
+        return Response(
+            json.dumps(response_items, cls=CompatEncoder),
+            content_type='application/json',
+            headers=resp_headers,
+        )
+
     except Exception as e:
         app.logger.exception('Unexpected error reranking items', e)
         return json.dumps(items)
@@ -721,7 +719,7 @@ def get_top_n(user_id, items, feature, top_n,
     item_map = {}
     unranked_items = []
     for item in items:
-        item_id = item.get('itemId') if item.get('itemId') else item.get('id')
+        item_id = item.get('itemId') or item.get('id')
         item_map[item_id] = item
         unranked_items.append(item_id)
 
@@ -737,7 +735,7 @@ def get_top_n(user_id, items, feature, top_n,
         experiment = exp_manager.get_active(feature, user_id)
 
     if experiment:
-        app.logger.info('Using experiment: ' + experiment.name)
+        app.logger.info(f'Using experiment: {experiment.name}')
 
         # Get ranked items from experiment.
         tracker = exp_manager.default_tracker()
@@ -796,11 +794,7 @@ def get_top_n(user_id, items, feature, top_n,
             if 'url' in item:
                 # Append the experiment correlation ID to the product URL so it gets tracked if used by client.
                 product_url = item.get('url')
-                if '?' in product_url:
-                    product_url += '&'
-                else:
-                    product_url += '?'
-
+                product_url += '&' if '?' in product_url else '?'
                 product_url += 'exp=' + top_item['experiment']['correlationId']
 
                 item['url'] = product_url
@@ -850,9 +844,12 @@ def choose_discounted():
                 item['discounted'] = False
                 return_items.append(item)
 
-        resp = Response(json.dumps(items, cls=CompatEncoder), content_type='application/json',
-                        headers=resp_headers)
-        return resp
+        return Response(
+            json.dumps(items, cls=CompatEncoder),
+            content_type='application/json',
+            headers=resp_headers,
+        )
+
     except Exception as e:
         app.logger.exception('Unexpected error calculating discounted items', e)
         return json.dumps(items)
@@ -891,8 +888,7 @@ def get_all_offers_by_id():
         logger.error(f"Offers service not giving us offers: {offers_response.reason}")
         raise BadRequest(message='Cannot obtain offers', status_code=500)
     offers = offers_response.json()['tasks']
-    offers_by_id = {str(offer['id']): offer for offer in offers}
-    return offers_by_id
+    return {str(offer['id']): offer for offer in offers}
 
 
 def get_offer_by_id(offer_id):
@@ -904,8 +900,7 @@ def get_offer_by_id(offer_id):
     if not offers_response.ok:
         logger.error(f"Offers service not giving us offers: {offers_response.reason}")
         raise BadRequest(message='Cannot obtain offers', status_code=500)
-    offer = offers_response.json()['task']
-    return offer
+    return offers_response.json()['task']
 
 
 @app.route('/coupon_offer', methods=['GET'])
@@ -1047,10 +1042,7 @@ def experiment_outcome():
 
 if __name__ == '__main__':
 
-    if DEBUG_LOGGING:
-        level = logging.DEBUG
-    else:
-        level = logging.INFO
+    level = logging.DEBUG if DEBUG_LOGGING else logging.INFO
     app.logger.setLevel(level)
     if EXPERIMENTATION_LOGGING:
         logging.getLogger('experimentation').setLevel(level=level)

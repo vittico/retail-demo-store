@@ -12,6 +12,7 @@ This script only needs to be run once to produce a random users data
 file that is bundled with all Retail Demo Store deployments. 
 """
 
+
 import datagenerator.users as users
 from datagenerator.users import UserPool
 
@@ -26,7 +27,7 @@ num_users = 6000
 num_web_users = (7*num_users)//8
 num_cstore_users = num_users - num_web_users
 
-print('Generating {} random web users...'.format(num_web_users))
+print(f'Generating {num_web_users} random web users...')
 
 pool = UserPool.new_file('users.json.gz',
                          num_web_users,
@@ -36,7 +37,7 @@ pool_check = UserPool.from_file('users.json.gz')
 if pool.users.__repr__() != pool_check.users.__repr__():
     raise ValueError("User generation: re-loading users alters something.")
 
-print('Generating {} random c-store users...'.format(num_cstore_users))
+print(f'Generating {num_cstore_users} random c-store users...')
 
 cstore_pool = UserPool.new_file('cstore_users.json.gz',
                                 num_cstore_users,

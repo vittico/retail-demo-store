@@ -38,8 +38,8 @@ def truncate_table(table):
     tableKeyNames = [key.get("AttributeName") for key in table.key_schema]
 
     #Only retrieve the keys for each item in the table (minimize data transfer)
-    projectionExpression = ", ".join('#' + key for key in tableKeyNames)
-    expressionAttrNames = {'#'+key: key for key in tableKeyNames}
+    projectionExpression = ", ".join(f'#{key}' for key in tableKeyNames)
+    expressionAttrNames = {f'#{key}': key for key in tableKeyNames}
 
     counter = 0
     page = table.scan(ProjectionExpression=projectionExpression, ExpressionAttributeNames=expressionAttrNames)

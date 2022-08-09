@@ -22,8 +22,7 @@ class RDSUserSelectionState:
 
   def user_search(self):
     separator = ' '
-    query = separator.join(random.sample(self.search_terms, 2))
-    return query
+    return separator.join(random.sample(self.search_terms, 2))
 
   def recommendations(self):
     return random.sample(self.subsample, 3)

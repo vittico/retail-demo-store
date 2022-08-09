@@ -27,7 +27,7 @@ class InterleavingExperiment(BuiltInExperiment):
             raise Exception(f'Experiment {self.id} does not have 2 or more variations')
 
         # Initialize array structure to hold item recommendations for each variation
-        variations_data = [[] for x in range(len(self.variations))]
+        variations_data = [[] for _ in range(len(self.variations))]
 
         resolve_params = {
             'user_id': user_id,
@@ -57,14 +57,15 @@ class InterleavingExperiment(BuiltInExperiment):
 
         if tracker is not None:
             # Track exposure details
-            track_interleaved = []
-            for item in interleaved:
-                track_interleaved.append({
+            track_interleaved = [
+                {
                     'item_id': item['itemId'],
-                    'variation_index': item['experiment']['variationIndex']
-                })
+                    'variation_index': item['experiment']['variationIndex'],
+                }
+                for item in interleaved
+            ]
 
-            timestamp = datetime.now() if not timestamp else timestamp
+            timestamp = timestamp or datetime.now()
             event = {
                 'event_type': 'Experiment Exposure',
                 'event_timestamp': int(round(timestamp.timestamp() * 1000)),
@@ -131,7 +132,7 @@ class InterleavingExperiment(BuiltInExperiment):
 
             # Add value to result if not already there
             item = list_of_item_lists[selection_order[next_idx]][offsets[next_idx]]
-            if not any(i['itemId'] == item['itemId'] for i in result):
+            if all(i['itemId'] != item['itemId'] for i in result):
                 variation_idx = selection_order[next_idx]
                 correlation_id = self._create_correlation_id(user_id, variation_idx, len(result) + 1)
 
@@ -184,7 +185,7 @@ class InterleavingExperiment(BuiltInExperiment):
     def _interleave_team_draft(self, user_id, list_of_item_lists, count):
         """ Returns interleaved list of items following the team draft method """
         # List of team rosters
-        teams = [[] for x in range(len(list_of_item_lists))]
+        teams = [[] for _ in range(len(list_of_item_lists))]
 
         # Offsets into list of item lists
         offsets = [0] * len(list_of_item_lists)
@@ -213,7 +214,7 @@ class InterleavingExperiment(BuiltInExperiment):
                 offsets[team_index] = next_offset + 1
 
                 item = items[next_offset]
-                if not any(i['itemId'] == item['itemId'] for i in result):
+                if all(i['itemId'] != item['itemId'] for i in result):
                     correlation_id = self._create_correlation_id(user_id, team_index, len(result) + 1)
 
                     item_experiment = {

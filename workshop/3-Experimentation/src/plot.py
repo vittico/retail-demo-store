@@ -282,24 +282,20 @@ def zplot(area=0.95, two_tailed=True, align_right=False):
                  rotation=90, va="bottom", ha="right")
         plt.text(right, norm.pdf(right), "z = {0:.3f}".format(right),
                  fontsize=12, rotation=90, va="bottom", ha="left")
-    # for one-tailed tests
+    elif align_right:
+        left = norm.ppf(1-area)
+        ax.vlines(left, 0, norm.pdf(left), color='grey', linestyle='--')
+        ax.fill_between(x, 0, y, color='grey', alpha=0.25,
+                        where=x > left)
+        plt.text(left, norm.pdf(left), "z = {0:.3f}".format(left),
+                 fontsize=12, rotation=90, va="bottom", ha="right")
     else:
-        # align the area to the right
-        if align_right:
-            left = norm.ppf(1-area)
-            ax.vlines(left, 0, norm.pdf(left), color='grey', linestyle='--')
-            ax.fill_between(x, 0, y, color='grey', alpha=0.25,
-                            where=x > left)
-            plt.text(left, norm.pdf(left), "z = {0:.3f}".format(left),
-                     fontsize=12, rotation=90, va="bottom", ha="right")
-        # align the area to the left
-        else:
-            right = norm.ppf(area)
-            ax.vlines(right, 0, norm.pdf(right), color='grey', linestyle='--')
-            ax.fill_between(x, 0, y, color='grey', alpha=0.25,
-                            where=x < right)
-            plt.text(right, norm.pdf(right), "z = {0:.3f}".format(right),
-                     fontsize=12, rotation=90, va="bottom", ha="left")
+        right = norm.ppf(area)
+        ax.vlines(right, 0, norm.pdf(right), color='grey', linestyle='--')
+        ax.fill_between(x, 0, y, color='grey', alpha=0.25,
+                        where=x < right)
+        plt.text(right, norm.pdf(right), "z = {0:.3f}".format(right),
+                 fontsize=12, rotation=90, va="bottom", ha="left")
 
     # annotate the shaded area
     plt.text(0, 0.1, "shaded area = {0:.3f}".format(area), fontsize=12,
@@ -369,7 +365,7 @@ def abplot_CI_bars(N, X, sig_level=0.05, dmin=None):
     # invert y axis to show variant 1 at the top
     ax.invert_yaxis()
     # label variants on y axis
-    labels = ['variant{}'.format(idx+1) for idx in range(len(N)-1)]
+    labels = [f'variant{idx + 1}' for idx in range(len(N)-1)]
     plt.yticks(np.arange(len(N)-1), labels)
 
 
@@ -423,5 +419,5 @@ def funnel_CI_plot(A, B, sig_level=0.05):
     # invert y axis to show variant 1 at the top
     ax.invert_yaxis()
     # label variants on y axis
-    labels = ['metric{}'.format(idx+1) for idx in range(len(A))]
+    labels = [f'metric{idx + 1}' for idx in range(len(A))]
     plt.yticks(np.arange(len(A)), labels)
