@@ -24,20 +24,19 @@ def lambda_handler(event, context):
     ''' 
 
     logger.debug(event)
-    
+
     products_service_host = os.environ.get('products_service_host')
     if not products_service_host:
         raise ValueError("Missing required environment value for 'products_service_host'")
 
-    logger.debug('Products service host: ' + products_service_host)
-    
-    new_endpoints = dict()
+    logger.debug(f'Products service host: {products_service_host}')
 
-    endpoints = event.get('Endpoints')
-    if endpoints:
+    new_endpoints = {}
+
+    if endpoints := event.get('Endpoints'):
         for key in endpoints:
-            logger.debug('Processing Pinpoint endpoint: ' + key)
-            
+            logger.debug(f'Processing Pinpoint endpoint: {key}')
+
             endpoint = endpoints.get(key)
 
             # A workaround: - if the address is not visible here it also does not find its way to Pinpoint
@@ -49,9 +48,7 @@ def lambda_handler(event, context):
                                                       EndpointId=key)
                 endpoint['Address'] = full_endpoint['EndpointResponse']['Address']
 
-            recommended_items = endpoint.get('RecommendationItems')
-            
-            if recommended_items:
+            if recommended_items := endpoint.get('RecommendationItems'):
                 recommendations = {
                     'Name': [''] * len(recommended_items),
                     'URL': [''] * len(recommended_items),
@@ -61,33 +58,33 @@ def lambda_handler(event, context):
                     'Price': [''] * len(recommended_items),
                     'ImageURL': [''] * len(recommended_items)
                 }
-                
+
                 for idx, item_id in enumerate(recommended_items):
-                    logger.debug('Looking up product information for product ' + item_id)
-                    
+                    logger.debug(f'Looking up product information for product {item_id}')
+
                     url = f'http://{products_service_host}/products/id/{item_id}?fullyQualifyImageUrls=1'
                     response = requests.get(url)
-                    
+
                     if response.ok:
                         product = response.json()
                         logger.debug(product)
-                        
+
                         recommendations['Name'][idx] = product['name']
                         recommendations['URL'][idx] = product['url']
                         recommendations['Category'][idx] = product['category']
                         recommendations['Style'][idx] = product['style']
                         recommendations['Description'][idx] = product['description']
-                        recommendations['Price'][idx] = '$ {}'.format(product['price'])
+                        recommendations['Price'][idx] = f"$ {product['price']}"
                         recommendations['ImageURL'][idx] = product['image']
                     else:
                         logger.error(response)
-                        
+
                 endpoint['Recommendations'] = recommendations
                 new_endpoints[key] = endpoint
             else:
-                logger.error('Endpoint {} does not have any RecommendationItems'.format(key))
+                logger.error(f'Endpoint {key} does not have any RecommendationItems')
     else:
         logger.error('Event is missing Endpoints document')
 
-    logger.debug("Returning endpoints: " + json.dumps(new_endpoints))
+    logger.debug(f"Returning endpoints: {json.dumps(new_endpoints)}")
     return new_endpoints

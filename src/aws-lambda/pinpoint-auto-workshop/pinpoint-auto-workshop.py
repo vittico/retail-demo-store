@@ -63,10 +63,10 @@ def create_email_template(template_name, template_fname_root, subject, descripti
     """
     logger.info(f"Creating email template: {template_name}")
 
-    with open('pinpoint-templates/'+template_fname_root+'.html', 'r') as html_file:
+    with open(f'pinpoint-templates/{template_fname_root}.html', 'r') as html_file:
         html_template = html_file.read()
 
-    with open('pinpoint-templates/'+template_fname_root+'.txt', 'r') as text_file:
+    with open(f'pinpoint-templates/{template_fname_root}.txt', 'r') as text_file:
         text_template = text_file.read()
 
     request = {
@@ -209,11 +209,16 @@ def create_recommendation_sms_template(recommender_id):
 def get_recommender_configuration(recommender_name):
     response = pinpoint.get_recommender_configurations()
 
-    for item in response['ListRecommenderConfigurationsResponse']['Item']:
-        if item['Name'] == recommender_name:
-            return item
-
-    return None
+    return next(
+        (
+            item
+            for item in response['ListRecommenderConfigurationsResponse'][
+                'Item'
+            ]
+            if item['Name'] == recommender_name
+        ),
+        None,
+    )
 
 
 def create_recommender(pinpoint_personalize_role_arn, personalize_campaign_arn, lambda_function_arn):
@@ -295,11 +300,14 @@ def create_offers_recommender(pinpoint_personalize_role_arn, personalize_campaig
 def get_segment(application_id, segment_name):
     response = pinpoint.get_segments(ApplicationId=application_id)
 
-    for item in response['SegmentsResponse']['Item']:
-        if item['Name'] == segment_name:
-            return item
-
-    return None
+    return next(
+        (
+            item
+            for item in response['SegmentsResponse']['Item']
+            if item['Name'] == segment_name
+        ),
+        None,
+    )
 
 
 def create_all_email_users_segment(application_id):
@@ -312,7 +320,7 @@ def create_all_email_users_segment(application_id):
     Returns:
     Segment config. Returns even if already exists.
     """
-    segment_name = f'AllEmailUsers'
+    segment_name = 'AllEmailUsers'
     segment_config = get_segment(application_id, segment_name)
 
     if not segment_config:
@@ -462,11 +470,14 @@ def create_users_with_verified_sms_segment(application_id):
 def get_campaign(application_id, campaign_name):
     response = pinpoint.get_campaigns(ApplicationId=application_id)
 
-    for item in response['CampaignsResponse']['Item']:
-        if item['Name'] == campaign_name:
-            return item
-
-    return None
+    return next(
+        (
+            item
+            for item in response['CampaignsResponse']['Item']
+            if item['Name'] == campaign_name
+        ),
+        None,
+    )
 
 
 def create_campaign(application_id,
@@ -556,19 +567,16 @@ def delete_event_rule(rule_name):
         response = cw_events.list_targets_by_rule(Rule = rule_name)
 
         if len(response['Targets']) > 0:
-            logger.info('Removing event targets from rule {}'.format(rule_name))
+            logger.info(f'Removing event targets from rule {rule_name}')
 
-            target_ids = []
-
-            for target in response['Targets']:
-                target_ids.append(target['Id'])
+            target_ids = [target['Id'] for target in response['Targets']]
 
             response = cw_events.remove_targets(
                 Rule = rule_name,
                 Ids = target_ids
             )
 
-        logger.info('Deleting event rule {}'.format(rule_name))
+        logger.info(f'Deleting event rule {rule_name}')
         cw_events.delete_rule(Name = rule_name)
 
     except ClientError as e:
@@ -603,14 +611,14 @@ def lambda_handler(event, context):
 
     assert personalize_campaign_arn != 'NONE', 'Personalize Campaign ARN not initialized'
 
-    logger.info('Personalize Campaign ARN: ' + personalize_campaign_arn)
+    logger.info(f'Personalize Campaign ARN: {personalize_campaign_arn}')
 
     recommender_id = create_recommender(pinpoint_personalize_role_arn, personalize_campaign_arn, lambda_function_arn)
-    logger.info('Pinpoint recommender configuration ID: ' + str(recommender_id))
+    logger.info(f'Pinpoint recommender configuration ID: {str(recommender_id)}')
 
     if do_deploy_offers_campaign:
         offers_recommender_id = create_offers_recommender(pinpoint_personalize_role_arn, offers_campaign_arn, offers_lambda_function_arn)
-        logger.info('Pinpoint offers configuration ID: ' + str(recommender_id))
+        logger.info(f'Pinpoint offers configuration ID: {str(recommender_id)}')
 
     # Create email templates
     create_welcome_email_template()
@@ -625,17 +633,18 @@ def lambda_handler(event, context):
     # Enable email for Pinpoint project
     email_from = email_from_address
     if email_from_name:
-        email_from = '{}<{}>'.format(email_from_name, email_from_address)
+        email_from = f'{email_from_name}<{email_from_address}>'
 
     logger.info('Enabling email channel for Pinpoint project')
     response = pinpoint.update_email_channel(
-        ApplicationId = pinpoint_app_id,
+        ApplicationId=pinpoint_app_id,
         EmailChannelRequest={
             'Enabled': True,
             'FromAddress': email_from,
-            'Identity': 'arn:aws:ses:{}:{}:identity/{}'.format(region, account_id, email_from_address)
-        }
+            'Identity': f'arn:aws:ses:{region}:{account_id}:identity/{email_from_address}',
+        },
     )
+
 
     logger.debug(json.dumps(response, indent = 2, default = str))
 
@@ -648,7 +657,10 @@ def lambda_handler(event, context):
     # Create UsersWithCartEmail segment
     segment_config = create_users_with_cart_segment(pinpoint_app_id, all_email_users_segment_id,
                                                     segment_name_suffix='Email')
-    logger.debug('Email cart segment config: ' + json.dumps(segment_config, indent=2, default=str))
+    logger.debug(
+        f'Email cart segment config: {json.dumps(segment_config, indent=2, default=str)}'
+    )
+
     email_users_with_cart_segment_id = segment_config['Id']
     email_users_with_cart_segment_version = segment_config['Version']
 
@@ -657,16 +669,20 @@ def lambda_handler(event, context):
         pinpoint_app_id, all_email_users_segment_id, all_email_users_segment_version,
         event_type="UserSignedUp", campaign_name='WelcomeEmail',
         email_from=email_from, email_template_name=welcome_template_name, sms_template_name=None)
-    logger.debug('welcome_campaign_config:'+json.dumps(welcome_campaign_config,
-                                                       indent=2, default=str))
+    logger.debug(
+        f'welcome_campaign_config:{json.dumps(welcome_campaign_config, indent=2, default=str)}'
+    )
+
 
     # Create Abandoned Cart campaign (triggered on session stop)
     abandoned_cart_campaign_config = create_campaign(
         pinpoint_app_id, email_users_with_cart_segment_id, email_users_with_cart_segment_version,
         event_type="_session.stop", campaign_name='AbandonedCartEmail',
         email_from=email_from, email_template_name=abandoned_cart_template_name, sms_template_name=None)
-    logger.debug('abandoned_cart_campaign_config:'+json.dumps(abandoned_cart_campaign_config,
-                                                       indent=2, default=str))
+    logger.debug(
+        f'abandoned_cart_campaign_config:{json.dumps(abandoned_cart_campaign_config, indent=2, default=str)}'
+    )
+
 
     if do_deploy_offers_campaign:
         # If offers campaign and geofence are not deployed, there is no point deploying these campaigns as
@@ -677,15 +693,19 @@ def lambda_handler(event, context):
             pinpoint_app_id, email_users_with_cart_segment_id, email_users_with_cart_segment_version,
             event_type=GEOFENCE_PINPOINT_EVENTTYPE, campaign_name='LocationAbandonedCartCampaign',
             email_from=email_from, email_template_name=location_abandoned_cart_template_name, sms_template_name=None)
-        logger.debug('location_abandoned_cart_campaign_config:' + json.dumps(location_abandoned_cart_campaign_config,
-                                                                             indent=2, default=str))
+        logger.debug(
+            f'location_abandoned_cart_campaign_config:{json.dumps(location_abandoned_cart_campaign_config, indent=2, default=str)}'
+        )
+
         # Send an offer when a user approaches your store.
         location_recommender_campaign_config = create_campaign(
             pinpoint_app_id, all_email_users_segment_id, all_email_users_segment_version,
             event_type=GEOFENCE_PINPOINT_EVENTTYPE, campaign_name='LocationRecommendationsCampaign',
             email_from=email_from, email_template_name=location_offers_recommendations_template_name, sms_template_name=None)
-        logger.debug('location_recommender_campaign_config:'+json.dumps(location_recommender_campaign_config,
-                                                                        indent=2, default=str))
+        logger.debug(
+            f'location_recommender_campaign_config:{json.dumps(location_recommender_campaign_config, indent=2, default=str)}'
+        )
+
 
     # Now let us set up SMS segments and campaigns.
 
@@ -714,7 +734,10 @@ def lambda_handler(event, context):
             }
         )
 
-    logger.debug('SMS enable response: ' + json.dumps(update_sms_channel_response, indent = 2, default = str))
+    logger.debug(
+        f'SMS enable response: {json.dumps(update_sms_channel_response, indent = 2, default = str)}'
+    )
+
 
     logger.info('Creating SMS templates')
     create_recommendation_sms_template(recommender_id)
@@ -730,7 +753,10 @@ def lambda_handler(event, context):
     # Create UsersWithCartSMS segment
     segment_config = create_users_with_cart_segment(pinpoint_app_id, all_sms_users_segment_id,
                                                     segment_name_suffix='SMS')
-    logger.debug('SMS cart segment config: ' + json.dumps(segment_config, indent=2, default=str))
+    logger.debug(
+        f'SMS cart segment config: {json.dumps(segment_config, indent=2, default=str)}'
+    )
+
     sms_users_with_cart_segment_id = segment_config['Id']
     sms_users_with_cart_segment_version = segment_config['Version']
 
@@ -742,8 +768,9 @@ def lambda_handler(event, context):
         email_from=None, email_template_name=None,
         sms_template_name=sms_recommendation_template_name)
     logger.debug(
-        'sms_signup_recommendations_campaign_config_sms:' + json.dumps(sms_signup_recommendations_campaign_config_sms,
-                                                                    indent=2, default=str))
+        f'sms_signup_recommendations_campaign_config_sms:{json.dumps(sms_signup_recommendations_campaign_config_sms, indent=2, default=str)}'
+    )
+
 
     if do_deploy_offers_campaign:
         # If offers campaign and geofence are not deployed, there is no point deploying these campaigns as
@@ -758,8 +785,9 @@ def lambda_handler(event, context):
             email_from=None, email_template_name=None,
             sms_template_name=location_abandoned_cart_template_name)
         logger.debug(
-            'location_abandoned_cart_campaign_config sms:' + json.dumps(location_abandoned_cart_campaign_config_sms,
-                                                                        indent=2, default=str))
+            f'location_abandoned_cart_campaign_config sms:{json.dumps(location_abandoned_cart_campaign_config_sms, indent=2, default=str)}'
+        )
+
 
         # Location demo: When a user gets near a store we want to send a recommendation of an offer
         location_recommender_campaign_config_sms = create_campaign(
@@ -767,8 +795,10 @@ def lambda_handler(event, context):
             all_sms_users_segment_version,
             event_type=GEOFENCE_PINPOINT_EVENTTYPE, campaign_name='LocationRecommendationsCampaignSMS',
             email_from=None, email_template_name=None, sms_template_name=location_offers_recommendations_template_name)
-        logger.debug('location_recommender_campaign_config_sms:' + json.dumps(location_recommender_campaign_config_sms,
-                                                                          indent=2, default=str))
+        logger.debug(
+            f'location_recommender_campaign_config_sms:{json.dumps(location_recommender_campaign_config_sms, indent=2, default=str)}'
+        )
+
 
     # No need for this lambda function to be called anymore so delete CW event rule that has been calling us.
     delete_event_rule(lambda_event_rule_name)

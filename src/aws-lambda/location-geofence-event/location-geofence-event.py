@@ -37,9 +37,7 @@ def get_long_code():
     response = ssm.get_parameter(Name='retaildemostore-pinpoint-sms-longcode')
     pinpoint_sms_long_code = response['Parameter']['Value']
 
-    if pinpoint_sms_long_code == 'NONE':
-        return None
-    return pinpoint_sms_long_code
+    return None if pinpoint_sms_long_code == 'NONE' else pinpoint_sms_long_code
 
 
 def userid_to_username(user_id, users_service):
@@ -62,7 +60,7 @@ def userid_to_username(user_id, users_service):
         user = response.json()
     except requests.exceptions.ConnectionError:
         logger.warning(f'Could not retrieve {user_url}')
-        return 'user' + user_id
+        return f'user{user_id}'
     username = user['username']
     logging.info(f"User ID {user_id} --> username {username}")
     return username
@@ -82,10 +80,14 @@ def get_user_opted_phone_number(shopper_user_id):
         logger.error(f"User {shopper_user_id} has no endpoints set. Unable to get phone number.")
         return None
     print('All user endpoints: ', json.dumps(endpoints, indent=4))
-    endpoints = [endpoint_item for endpoint_item in endpoints['EndpointsResponse']['Item'] if
-                 'ChannelType' in endpoint_item and endpoint_item['ChannelType'] == 'SMS' and
-                 endpoint_item['EndpointStatus'].upper() == 'ACTIVE' and endpoint_item['OptOut'] == 'NONE']
-    if len(endpoints) > 0:
+    if endpoints := [
+        endpoint_item
+        for endpoint_item in endpoints['EndpointsResponse']['Item']
+        if 'ChannelType' in endpoint_item
+        and endpoint_item['ChannelType'] == 'SMS'
+        and endpoint_item['EndpointStatus'].upper() == 'ACTIVE'
+        and endpoint_item['OptOut'] == 'NONE'
+    ]:
         if len(endpoints) > 1:
             logger.warning(f'User has more than 1 SMS endpoint: {endpoints}')
         return endpoints[0]['Address']
@@ -124,20 +126,14 @@ def pinpoint_fire_location_approached_event(shopper_user_id, event_timestamp_iso
         removed = []
         kept = defaultdict(list)
         for endpoint in endpoints:
-            if 'ChannelType' in endpoint:
-                channel_type = endpoint['ChannelType']
-            else:
-                channel_type = 'unk'
-            if 'Address' in endpoint:
-                addr = endpoint['Address']
-            else:
-                addr = 'unk'
+            channel_type = endpoint['ChannelType'] if 'ChannelType' in endpoint else 'unk'
+            addr = endpoint['Address'] if 'Address' in endpoint else 'unk'
             if endpoint['EndpointStatus'].upper() == 'ACTIVE' and len(kept[(channel_type, addr)]) < restrict_number:
                 kept[(channel_type, addr)].append(endpoint)
             else:
                 removed.append(endpoint)
                 logger.info(f"Dropping endpoint with Id {endpoint['Id']}")
-        if len(removed) > 0:
+        if removed:
             logger.info(f"Dropped {len(removed)} endpoints.")
         endpoints = []
         for endpointlist in kept.values():
@@ -154,14 +150,22 @@ def pinpoint_fire_location_approached_event(shopper_user_id, event_timestamp_iso
 
     sess_id = str(uuid.uuid4())
 
-    events = {endpoint_id: {'Endpoint': {},  # We need to provide this but empty because not here to update endpoint
-                            'Events': {endpoint_id:  # API docs state this is the endpoint ID too
-                                       {'EventType': GEOFENCE_PINPOINT_EVENTTYPE,
-                                        'Session': {'Id': sess_id, 'StartTimestamp': timestamp},  # required
-                                        'Timestamp': timestamp}}}  # required
-              for endpoint_id in endpoint_ids}
-
-    if len(events) > 0:
+    if events := {
+        endpoint_id: {
+            'Endpoint': {},  # We need to provide this but empty because not here to update endpoint
+            'Events': {
+                endpoint_id: {  # API docs state this is the endpoint ID too
+                    'EventType': GEOFENCE_PINPOINT_EVENTTYPE,
+                    'Session': {
+                        'Id': sess_id,
+                        'StartTimestamp': timestamp,
+                    },  # required
+                    'Timestamp': timestamp,
+                }
+            },
+        }  # required
+        for endpoint_id in endpoint_ids
+    }:
         logger.info(f'Firing Pinpoint events: {events}')
         pinpoint.put_events(
             ApplicationId=pinpoint_app_id,
@@ -284,7 +288,7 @@ def get_service(environ_key, get_local_ip=False, local_servicename=None):
             )
             service_instance = response['Instances'][0]['Attributes']['AWS_INSTANCE_IPV4']
             response = requests.get('http://{service_instance}/')
-            return 'http://' + service_instance
+            return f'http://{service_instance}'
         except requests.exceptions.ConnectionError:
             # For local development
             logger.debug('Could not pick up Local IP for orders service. Looking at environment')
@@ -494,7 +498,7 @@ def send_pickup_sms(all_orders, add_order_details=False):
     Returns:
         Nothing but sends an SMS.
     """
-    logger.info(f"Collecting phone numbers to send SMSs")
+    logger.info("Collecting phone numbers to send SMSs")
 
     phone_to_orders = defaultdict(list)
     for order in all_orders:
@@ -504,27 +508,22 @@ def send_pickup_sms(all_orders, add_order_details=False):
 
         logger.info(f"Going to send a text message to {to_number}")
 
-        if not add_order_details:
-            if len(orders) > 1:
-                msg = "Your orders are ready for pickup from your local AWS Retail Demo store, level 3, door 2."
-            else:
-                msg = "Your order is ready for pickup from your local AWS Retail Demo Store, level 3, door 2."
-        else:
-            msg = ""
-            if len(orders) > 1:
-                msg += "The orders you placed with ids"
-            else:
-                msg += "The order you placed with id"
+        if add_order_details:
+            msg = "" + (
+                "The orders you placed with ids"
+                if len(orders) > 1
+                else "The order you placed with id"
+            )
 
             msg += ",".join(" #" + order['id'] for order in orders)
 
-            if len(orders) > 1:
-                msg += " are "
-            else:
-                msg += " is "
-
+            msg += " are " if len(orders) > 1 else " is "
             msg += "ready for pickup from your local AWS retail demo store."
 
+        elif len(orders) > 1:
+            msg = "Your orders are ready for pickup from your local AWS Retail Demo store, level 3, door 2."
+        else:
+            msg = "Your order is ready for pickup from your local AWS Retail Demo Store, level 3, door 2."
         logger.info(f"Contents of SMS text: {msg} to {to_number}")
         try:
             send_sms(to_number, msg)
@@ -543,7 +542,7 @@ def remove_browser_notification_connections(user_id, connection_ids):
         UpdateExpression='DELETE connectionIds :c',
         ExpressionAttributeValues=dynamo_update_expression
     )
-    logger.info(f"Gone connections deleted")
+    logger.info("Gone connections deleted")
 
 
 def send_browser_notification(user_id, data):
@@ -562,8 +561,8 @@ def send_browser_notification(user_id, data):
 
     if 'Item' in dynamo_entry:
         logger.info(f'Retrieved connection table entry: {dynamo_entry["Item"]}')
-        gone_connections = []
         if 'connectionIds' in dynamo_entry['Item']:
+            gone_connections = []
             for connection_id in dynamo_entry['Item']['connectionIds']['SS']:
                 try:
                     logger.info(f'Posting to connection ID: {connection_id}')

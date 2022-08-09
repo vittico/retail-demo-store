@@ -40,9 +40,11 @@ def list_video_file_keys():
         Returns the S3 keys of all .mkv files in the 'video path' of the staging S3 bucket.
     """
     objects = s3_client.list_objects_v2(Bucket=S3_BUCKET, Prefix=VIDEO_PATH)['Contents']
-    # TODO: Ensure the fact we are only handling mkv files is captured in the README
-    video_file_keys = [s3_object['Key'] for s3_object in objects if s3_object['Key'].endswith('.mkv')]
-    return video_file_keys
+    return [
+        s3_object['Key']
+        for s3_object in objects
+        if s3_object['Key'].endswith('.mkv')
+    ]
 
 
 def channel_config_exists(video_s3_key):
@@ -56,9 +58,7 @@ def channel_config_exists(video_s3_key):
     video_channel_param_value = ssm_client.get_parameter(Name=SSM_VIDEO_CHANNEL_MAP_PARAM)['Parameter']['Value']
     video_channel_map = json.loads(video_channel_param_value)
 
-    if video_s3_key in video_channel_map:
-        return True
-    return False
+    return video_s3_key in video_channel_map
 
 
 def channel_exists(arn):
@@ -137,10 +137,17 @@ def create_ivs_channels(event, _):
             if channel_exists(video_channel_arn):
                 logger.info(f"Video with key {video_file_key} is already associated with IVS channel {video_channel_arn}")
                 continue
-        
+
         # Note: IVS does not mind identical channel names and accepts the below characters
-        channel_name = 'retail-demo-store-' + \
-                       re.subn(r"[^A-z|0-9|\-]", '', video_file_key+'-'+datetime.now().isoformat())[0][:127]
+        channel_name = (
+            'retail-demo-store-'
+            + re.subn(
+                r"[^A-z|0-9|\-]",
+                '',
+                f'{video_file_key}-{datetime.now().isoformat()}',
+            )[0][:127]
+        )
+
         logger.info(f"Creating IVS channel for video {video_file_key} with name {channel_name}")
 
         try:
@@ -159,7 +166,7 @@ def create_ivs_channels(event, _):
                     Type='String',
                     Overwrite=True
                 )
-    
+
             else:
                 ssm_client.put_parameter(
                     Name=SSM_VIDEO_CHANNEL_MAP_PARAM,
@@ -209,7 +216,7 @@ def delete_all_channels(event, _):
     """
         Deletes all IVS channels referenced in the SSM_VIDEO_CHANNEL_MAP_PARAM.
     """
-    logger.info(f"Deleting all IVS channels in stack")
+    logger.info("Deleting all IVS channels in stack")
     if is_ssm_parameter_set(SSM_VIDEO_CHANNEL_MAP_PARAM):
         video_channel_param_value = ssm_client.get_parameter(Name=SSM_VIDEO_CHANNEL_MAP_PARAM)['Parameter']['Value']
         video_channel_map = json.loads(video_channel_param_value)
@@ -228,9 +235,11 @@ def delete_all_channels(event, _):
 
     ssm_client.put_parameter(
         Name=SSM_VIDEO_CHANNEL_MAP_PARAM,
-        Value="NONE" if len(new_video_channel_map)==0 else json.dumps(new_video_channel_map),
+        Value=json.dumps(new_video_channel_map)
+        if new_video_channel_map
+        else "NONE",
         Type='String',
-        Overwrite=True
+        Overwrite=True,
     )
 
 

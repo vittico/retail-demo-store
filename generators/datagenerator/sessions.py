@@ -19,11 +19,11 @@ class Sessions(UserList):
     self.data = []
 
     for hourly_users in self.user_time_slots():
-      for i in range(hourly_users[1]):
+      for _ in range(hourly_users[1]):
         active_user = np.random.binomial(1, .5)
         user = user_pool.user(active_user)
         # Pick a random funnel - note that the same user can repeat the same funnel several times potentially
-        funnel = random.choice(self.event_templates)  
+        funnel = random.choice(self.event_templates)
         self.data.append(Funnel(hourly_users[0], funnel, user))
 
   # Generates a series of datetime stamps for events (default every minute from start)

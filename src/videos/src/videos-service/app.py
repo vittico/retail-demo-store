@@ -61,7 +61,11 @@ def load_default_streams_config():
     config = json.loads(config_response['Body'].read().decode('utf-8'))
     for (key, entry) in config.items():
         app.logger.info(f"{key}, {entry}")
-        config[key] = {**entry, 'thumb_url': STATIC_URL_PATH + '/' + entry['thumb_fname']}
+        config[key] = {
+            **entry,
+            'thumb_url': f'{STATIC_URL_PATH}/' + entry['thumb_fname'],
+        }
+
         config[key].pop('thumb_fname', None)
 
     app.logger.info("Pulled config:")
@@ -85,10 +89,10 @@ def download_video_file(s3_key):
     thumbnail_key = '.'.join(s3_key.split('.')[:-1]) + '.png'
     try:
         local_thumbnail_fname = thumbnail_key.split('/')[-1]
-        local_thumbnail_path = app.static_folder + '/' + local_thumbnail_fname
+        local_thumbnail_path = f'{app.static_folder}/{local_thumbnail_fname}'
         s3_client.download_file(Bucket=VIDEO_BUCKET, Key=thumbnail_key, Filename=local_thumbnail_path)
         app.logger.info(f"File {thumbnail_key} downloaded from bucket {VIDEO_BUCKET} to {local_thumbnail_path}.")
-        thumbnail_path = app.static_url_path + '/' + local_thumbnail_fname
+        thumbnail_path = f'{app.static_url_path}/{local_thumbnail_fname}'
     except Exception as e:
         app.logger.warning(f'No thumbnail available for {VIDEO_BUCKET}/{s3_key} as {VIDEO_BUCKET}/{thumbnail_key} - '
                            f'exception: {e}')
@@ -124,9 +128,8 @@ def get_featured_products(video_filepath, channel_id):
             product_id = json.loads(line.content)['productId']
             if 'products' not in stream_details[channel_id]:
                 stream_details[channel_id]['products'] = [product_id]
-            else:
-                if product_id not in stream_details[channel_id]['products']:
-                    stream_details[channel_id]['products'].append(product_id)
+            elif product_id not in stream_details[channel_id]['products']:
+                stream_details[channel_id]['products'].append(product_id)
 
 
 def is_ssm_parameter_set(parameter_name):
@@ -209,7 +212,7 @@ def stream(s3_video_key, ivs_channel_arn, channel_id):
     """
     video_filepath, thumb_url = download_video_file(s3_video_key)
     if thumb_url is None:
-        thumb_url = app.static_url_path + '/' + DEFAULT_THUMB_FNAME
+        thumb_url = f'{app.static_url_path}/{DEFAULT_THUMB_FNAME}'
 
     channel_response = ivs_client.get_channel(arn=ivs_channel_arn)['channel']
     ingest_endpoint = channel_response['ingestEndpoint']
@@ -224,46 +227,45 @@ def stream(s3_video_key, ivs_channel_arn, channel_id):
     stream_key = ivs_client.get_stream_key(arn=stream_arn)['streamKey']['value']
     app.logger.info(f"Stream details:\nIngest endpoint: {ingest_endpoint}\nStream state: {stream_state}")
 
-    if SUBTITLE_FORMAT == 'srt':
-        while True:
-            if stream_state != "NOT_BROADCASTING":
-                app.logger.info(f"Stream {stream_arn} is currently in state {stream_state}. Waiting for state NOT_BROADCASTING")
-                sleep_time = 20
-                app.logger.info(f"Waiting for {sleep_time} seconds")
-                time.sleep(sleep_time)
-                stream_state = get_stream_state(ivs_channel_arn)
-                continue
-
-            app.logger.info('Starting video stream')
-            ffmpeg_stream_cmd = get_ffmpeg_stream_cmd(video_filepath, ingest_endpoint, stream_key, SUBTITLE_FORMAT)
-            app.logger.info(f'ffmpeg command: {ffmpeg_stream_cmd}')
-
-            process = subprocess.Popen(
-                ffmpeg_stream_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, shell=True)
-            app.logger.info('Running ffmpeg processes:')
-            app.logger.info(os.system("ps aux|grep 'PID\|ffmpeg'"))
-
-            lines = iter(process.stdout)
-            app.logger.info('Starting event stream')
-            while True:
-                try:
-                    int(next(lines).strip())
-                    time_range = next(lines).strip()
-                    if not '-->' in time_range:
-                        raise ValueError(f'Expected a time range instead of {time_range}')
-                    send_text = ''
-                    while True:
-                        text = next(lines).strip()
-                        if len(text) == 0: break
-                        if len(send_text)>0: send_text+='\n'
-                        send_text += text
-                    put_ivs_metadata(ivs_channel_arn, send_text)
-                except StopIteration:
-                    app.logger.warning('Video iteration has stopped unexpectedly. Attempting restart in 10 seconds.')
-                    time.sleep(10)
-                    break
-    else:
+    if SUBTITLE_FORMAT != 'srt':
         raise NotImplementedError(f'{SUBTITLE_FORMAT} is not currently supported by this demo.')
+    while True:
+        if stream_state != "NOT_BROADCASTING":
+            app.logger.info(f"Stream {stream_arn} is currently in state {stream_state}. Waiting for state NOT_BROADCASTING")
+            sleep_time = 20
+            app.logger.info(f"Waiting for {sleep_time} seconds")
+            time.sleep(sleep_time)
+            stream_state = get_stream_state(ivs_channel_arn)
+            continue
+
+        app.logger.info('Starting video stream')
+        ffmpeg_stream_cmd = get_ffmpeg_stream_cmd(video_filepath, ingest_endpoint, stream_key, SUBTITLE_FORMAT)
+        app.logger.info(f'ffmpeg command: {ffmpeg_stream_cmd}')
+
+        process = subprocess.Popen(
+            ffmpeg_stream_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, shell=True)
+        app.logger.info('Running ffmpeg processes:')
+        app.logger.info(os.system("ps aux|grep 'PID\|ffmpeg'"))
+
+        lines = iter(process.stdout)
+        app.logger.info('Starting event stream')
+        while True:
+            try:
+                int(next(lines).strip())
+                time_range = next(lines).strip()
+                if '-->' not in time_range:
+                    raise ValueError(f'Expected a time range instead of {time_range}')
+                send_text = ''
+                while True:
+                    text = next(lines).strip()
+                    if len(text) == 0: break
+                    if len(send_text)>0: send_text+='\n'
+                    send_text += text
+                put_ivs_metadata(ivs_channel_arn, send_text)
+            except StopIteration:
+                app.logger.warning('Video iteration has stopped unexpectedly. Attempting restart in 10 seconds.')
+                time.sleep(10)
+                break
 # -- End Video streaming
 
 
@@ -325,9 +327,7 @@ def index():
 
 @app.route('/stream_details')
 def streams():
-    response_data = []
-    for value in stream_details.values():
-        response_data.append(value)
+    response_data = list(stream_details.values())
     response = {
         "streams": response_data
     }

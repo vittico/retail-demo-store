@@ -42,9 +42,7 @@ class EvidentlyExperiment(experiment.Experiment):
 
         items = variation.resolver.get_items(**resolve_params)
 
-        # Inject experiment details into recommended item list.
-        rank = 1
-        for item in items:
+        for rank, item in enumerate(items, start=1):
             correlation_id = self._create_evidently_correlation_id(user_id)
 
             item_experiment = {
@@ -61,8 +59,6 @@ class EvidentlyExperiment(experiment.Experiment):
                 'experiment': item_experiment
             })
 
-            rank += 1
-
         # Log exposure with Evidently
         self._send_evidently_event(user_id, EXPOSURE_METRIC_VALUE, timestamp)
 
@@ -76,28 +72,27 @@ class EvidentlyExperiment(experiment.Experiment):
 
     def _send_evidently_event(self, user_id: str, metric_value: float, timestamp: datetime = datetime.now()):
         # In case None is passed for timestamp
-        timestamp = datetime.now() if not timestamp else timestamp
+        timestamp = timestamp or datetime.now()
 
         # We convert the feature name from snake case to camel case for the metric value key.
         metric_name = f'{self._snake_to_camel_case(self.feature)}Clicked'
 
         response = evidently.put_project_events(
-            project = self.project,
-            events = [
+            project=self.project,
+            events=[
                 {
                     'type': 'aws.evidently.custom',
                     'timestamp': timestamp,
-                    'data': json.dumps({
-                        'details': {
-                            metric_name: metric_value
-                        },
-                        'userDetails': {
-                            'userId': str(user_id)
+                    'data': json.dumps(
+                        {
+                            'details': {metric_name: metric_value},
+                            'userDetails': {'userId': user_id},
                         }
-                    })
+                    ),
                 }
-            ]
+            ],
         )
+
         log.debug(response)
 
     def _create_evidently_correlation_id(self, user_id: str) -> str:

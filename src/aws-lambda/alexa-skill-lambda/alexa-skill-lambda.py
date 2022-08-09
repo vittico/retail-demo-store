@@ -98,10 +98,9 @@ def get_nice_address(address):
 
     spoken_number = address['AddressNumber']
     if len(spoken_number) >= 4:
-        spoken_number = spoken_number[:2] + ' ' + spoken_number[2:]
+        spoken_number = f'{spoken_number[:2]} {spoken_number[2:]}'
 
-    spoken_address = spoken_number + " " + spoken_street
-    return spoken_address
+    return f"{spoken_number} {spoken_street}"
 
 
 def get_cognito_user_details(handler_input):
@@ -138,7 +137,7 @@ def get_cognito_user_details(handler_input):
         logger.info(f"Got user info from Cognito: {user_details}")
 
         if 'custom:profile_user_id' not in user_details:
-            logger.warning(f"Profile user has not been selected for Cognito user")
+            logger.warning("Profile user has not been selected for Cognito user")
             raise Exception("Must use default user because simulation user not selected.")
         else:
             user_details['cognito_loaded'] = True
@@ -308,11 +307,16 @@ def fetch_product_slot_directive(handler_input):
 
     session_attr = handler_input.attributes_manager.session_attributes
     if 'Products' not in session_attr:
-        session_attr['Products'] = {}
-        for product in products:
-            session_attr['Products'][product['id']] = {'name': product['name'], 'price': product['price'],
-                                                       'image': product['image'], 'url': product['url'],
-                                                       'id': product['id']}
+        session_attr['Products'] = {
+            product['id']: {
+                'name': product['name'],
+                'price': product['price'],
+                'image': product['image'],
+                'url': product['url'],
+                'id': product['id'],
+            }
+            for product in products
+        }
 
     entity_list_values = []
     for product in products:
@@ -464,8 +468,7 @@ def get_customer_location():
         list: Coordinates lat/long.
     """
     cstore_route = json.loads(urlopen(f'{LOCATION_SERVICE_URL}/cstore_route').read().decode('utf-8'))
-    customer_position = cstore_route['features'][0]['geometry']['coordinates'][0]
-    return customer_position
+    return cstore_route['features'][0]['geometry']['coordinates'][0]
 
 
 def location_search_cstore() -> Tuple[str, float]:
@@ -556,8 +559,7 @@ def get_cart_total(handler_input):
     """
 
     cart = get_cart(handler_input)
-    total = sum(item['price'] * item['quantity'] for item in cart['items'])
-    return total
+    return sum(item['price'] * item['quantity'] for item in cart['items'])
 
 
 def add_product_to_cart(handler_input, product):
@@ -702,7 +704,7 @@ class FindStoreIntentHandler(AbstractRequestHandler):
             miles_formatted = f'{shop_dist_miles:0.0f}'.strip()
         units_text = 'mile' if miles_formatted == '1' else 'miles'
         speak_output = f"There is a convenience store {miles_formatted} {units_text} away at {spoken_address}. " \
-                       "Would you like to pre-order items to collect when you arrive?"
+                           "Would you like to pre-order items to collect when you arrive?"
         set_question_asked(handler_input, 'START_PREORDER')
         product_slot_directive = DynamicEntitiesDirective(update_behavior=UpdateBehavior.REPLACE,
                                                           types=[fetch_product_slot_directive(handler_input)])
@@ -1001,8 +1003,9 @@ class AmazonPaySetupResponseHandler(AbstractRequestHandler):
         Returns:
             bool
         """
-        connection_response = ask_utils.is_request_type("Connections.Response")(handler_input)
-        if connection_response:
+        if connection_response := ask_utils.is_request_type(
+            "Connections.Response"
+        )(handler_input):
             envelope = handler_input.request_envelope
             logger.info(f"We have a connection response: {envelope}")
             return (envelope.request.name == "Setup")
@@ -1027,11 +1030,11 @@ class AmazonPaySetupResponseHandler(AbstractRequestHandler):
 
             message = handler_input.request_envelope.request.status.message
             logstr = f"Not an OK return status from Amazon Pay Setup: {action_response_status_code} " \
-                     f"with payload {action_response_payload} and message {message} "
+                         f"with payload {action_response_payload} and message {message} "
             speak_output = f"There was a problem with Amazon Pay Setup: {message} "
             try:
-                speak_output += ' More detail: ' + action_response_payload.error_message
-                logstr += ' More detail: ' + action_response_payload.error_message
+                speak_output += f' More detail: {action_response_payload.error_message}'
+                logstr += f' More detail: {action_response_payload.error_message}'
             except:
                 pass
             logger.error(logstr)
@@ -1133,8 +1136,9 @@ class AmazonPayChargeResponseHandler(AbstractRequestHandler):
         Returns:
             bool
         """
-        connection_response = ask_utils.is_request_type("Connections.Response")(handler_input)
-        if connection_response:
+        if connection_response := ask_utils.is_request_type(
+            "Connections.Response"
+        )(handler_input):
             envelope = handler_input.request_envelope
             return (envelope.request.name == "Charge")
         return False
@@ -1171,7 +1175,7 @@ class AmazonPayChargeResponseHandler(AbstractRequestHandler):
         order_response = submit_order(handler_input)
         send_order_confirm_email(handler_input, [order_response], False)
 
-        speak_output = f"Your order will be ready when you arrive."
+        speak_output = "Your order will be ready when you arrive."
         return (
             handler_input.response_builder
                 .speak(speak_output)

@@ -40,9 +40,7 @@ class MultiArmedBanditExperiment(BuiltInExperiment):
         }
         items = variation.resolver.get_items(**resolve_params)
 
-        # Inject experiment details into recommended items list
-        rank = 1
-        for item in items:
+        for rank, item in enumerate(items, start=1):
             correlation_id = self._create_correlation_id(user_id, variation_idx, rank)
 
             item_experiment = {
@@ -59,11 +57,9 @@ class MultiArmedBanditExperiment(BuiltInExperiment):
                 'experiment': item_experiment
             })
 
-            rank += 1
-
         if tracker is not None:
             # Track exposure details for analysis
-            timestamp = datetime.now() if not timestamp else timestamp
+            timestamp = timestamp or datetime.now()
             event = {
                 'event_type': 'Experiment Exposure',
                 'event_timestamp': int(round(timestamp.timestamp() * 1000)),

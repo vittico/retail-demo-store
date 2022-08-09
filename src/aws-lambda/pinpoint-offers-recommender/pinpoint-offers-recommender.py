@@ -23,8 +23,7 @@ def get_offer_by_id(offer_id):
     if not offers_response.ok:
         logger.error(f"Offers service not giving us offers: {offers_response.reason}")
         return None
-    offer = offers_response.json()['task']
-    return offer
+    return offers_response.json()['task']
 
 
 def lambda_handler(event, context):
@@ -41,13 +40,12 @@ def lambda_handler(event, context):
     logger.info('EVENT')
     logger.info(event)
 
-    new_endpoints = dict()
+    new_endpoints = {}
 
-    endpoints = event.get('Endpoints')
-    if endpoints:
+    if endpoints := event.get('Endpoints'):
         logger.info('endpoints')
         for key in endpoints:
-            logger.debug('Processing Pinpoint endpoint: ' + key)
+            logger.debug(f'Processing Pinpoint endpoint: {key}')
 
             endpoint = endpoints.get(key)
             logger.info(f"Processing endpoint: {json.dumps(endpoint, indent=2)}")
@@ -61,15 +59,13 @@ def lambda_handler(event, context):
                                                       EndpointId=key)
                 endpoint['Address'] = full_endpoint['EndpointResponse']['Address']
 
-            recommended_items = endpoint.get('RecommendationItems')
-
-            if recommended_items:
+            if recommended_items := endpoint.get('RecommendationItems'):
                 recommendations = {
                     'OfferCode': [''] * len(recommended_items),
                     'OfferDescription': [''] * len(recommended_items)
                 }
                 for idx, item_id in enumerate(recommended_items):
-                    logger.debug('Looking up product information for item ' + item_id)
+                    logger.debug(f'Looking up product information for item {item_id}')
                     offer = get_offer_by_id(item_id)
                     if offer is not None:
 
@@ -79,10 +75,10 @@ def lambda_handler(event, context):
 
                     else:
 
-                        recommendations['OfferCode'][idx] = 'UNKNOWNID'+item_id
+                        recommendations['OfferCode'][idx] = f'UNKNOWNID{item_id}'
                         recommendations['OfferDescription'][idx] = f'Unknown code with id {item_id}'
             else:
-                logger.error('Endpoint {} does not have any RecommendationItems'.format(key))
+                logger.error(f'Endpoint {key} does not have any RecommendationItems')
                 recommendations = {}
 
             endpoint['Recommendations'] = recommendations
@@ -91,5 +87,5 @@ def lambda_handler(event, context):
     else:
         logger.error('Event is missing Endpoints document')
 
-    logger.info("Returning endpoints: " + json.dumps(new_endpoints, indent=2))
+    logger.info(f"Returning endpoints: {json.dumps(new_endpoints, indent=2)}")
     return new_endpoints

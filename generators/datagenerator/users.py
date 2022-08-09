@@ -74,7 +74,7 @@ class UserPool:
     return len(self.active)
 
   def grow_pool(self, num_users, selectable_user):
-    for i in range(num_users):
+    for _ in range(num_users):
       self.last_id += 1
       user = User(category_preference_personas=self.category_preference_personas,
                   selectable_user=selectable_user,
@@ -112,7 +112,7 @@ class UserPool:
     for saved_user in data:
       user = User.from_file(saved_user)
       bisect.insort(user_ids, int(user.id))
-      user_pool.last_id = user_ids[len(user_ids) - 1]
+      user_pool.last_id = user_ids[-1]
       user_pool.users.append(user)
       user_pool.category_preference_personas.add(user.persona)
     user_pool.category_preference_personas = tuple(user_pool.category_preference_personas)

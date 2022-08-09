@@ -65,16 +65,9 @@ class AmplitudeSender:
       "events": events
     }
 
-    events_str = json.dumps(batch_events, default=lambda x: x.__dict__) 
-    #print(f'Batch length bytes: {len(events_str)}')
-    if debug:
-      parsed = json.loads(events_str)
-      print(f'{json.dumps(parsed, indent=4)}')
-      response = None
-    else:
-      response = requests.post(self.endpoint, 
-        data=events_str)
-      #print(self.config_keys[platform])
-      #print(json.dumps(batch_events, default=lambda x: x.__dict__))
-      #print(f'Sent {len(batch_events["batch"])} events and got {response}')
-    return response
+    events_str = json.dumps(batch_events, default=lambda x: x.__dict__)
+    if not debug:
+      return requests.post(self.endpoint, data=events_str)
+    parsed = json.loads(events_str)
+    print(f'{json.dumps(parsed, indent=4)}')
+    return None

@@ -11,7 +11,7 @@ def full_request_url(base, text, wildcards={}):
     """
     for key in wildcards.keys():
         text = text.replace(key, str(wildcards[key]))
-    print(f'########')
+    print('########')
     print(str(base) + str(text))
     return str(base) + str(text)
 

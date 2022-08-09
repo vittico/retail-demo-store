@@ -24,6 +24,7 @@ don't focus on or have time to train Personalize models but depend on them.
 For example, the Experimentation workshop.
 """
 
+
 import json
 import boto3
 import logging
@@ -49,10 +50,10 @@ sts = boto3.client('sts')
 bucket = os.environ['csv_bucket']
 bucket_path = os.environ.get('csv_path', '')
 
-items_filename = bucket_path + "items.csv"
-users_filename = bucket_path + "users.csv"
-interactions_filename = bucket_path + "interactions.csv"
-offer_interactions_filename = bucket_path + "offer_interactions.csv"
+items_filename = f"{bucket_path}items.csv"
+users_filename = f"{bucket_path}users.csv"
+interactions_filename = f"{bucket_path}interactions.csv"
+offer_interactions_filename = f"{bucket_path}offer_interactions.csv"
 
 session = boto3.session.Session()
 region = session.region_name
@@ -511,10 +512,11 @@ def create_event_tracker(dataset_group_arn: str, event_tracker_conf: Dict) -> Tu
             ssm.put_parameter(
                 Name=event_tracker_conf['param'],
                 Description=event_tracker_conf['paramDescription'],
-                Value='{}'.format(event_tracker_conf['trackingId']),
+                Value=f"{event_tracker_conf['trackingId']}",
                 Type='String',
-                Overwrite=True
+                Overwrite=True,
             )
+
 
     return event_tracker_conf['arn'], not tracker_exists
 
@@ -547,7 +549,7 @@ def create_import_job(dataset_conf: Dict) -> Tuple[str, bool]:
     import_job_exists=False
 
     job_name = dataset_conf['name']+'-import'
-    data_location = "s3://{}/{}".format(bucket, dataset_conf['s3Key'])
+    data_location = f"s3://{bucket}/{dataset_conf['s3Key']}"
 
     paginator = personalize.get_paginator('list_dataset_import_jobs')
     for paginate_result in paginator.paginate(datasetArn = dataset_conf['arn']):
@@ -592,10 +594,10 @@ def enable_event_rule(rule_name: str):
         error_code = e.response['Error']['Code']
         if error_code == 'ResourceNotFoundException':
             logger.error('CloudWatch event rule to enable not found')
-            raise
         else:
             logger.error(e)
-            raise
+
+        raise
 
 def disable_event_rule(rule_name: str):
     """
@@ -653,9 +655,9 @@ def rebuild_webui_service(region, account_id):
 
     for pipelines in pipeline_iterator:
         for pipeline in pipelines['pipelines']:
-            logger.debug('Checking pipeline {} for web-ui tag'.format(pipeline['name']))
+            logger.debug(f"Checking pipeline {pipeline['name']} for web-ui tag")
 
-            arn = 'arn:aws:codepipeline:{}:{}:{}'.format(region, account_id, pipeline['name'])
+            arn = f"arn:aws:codepipeline:{region}:{account_id}:{pipeline['name']}"
 
             response_tags = codepipeline.list_tags_for_resource(resourceArn=arn)
 
@@ -665,7 +667,10 @@ def rebuild_webui_service(region, account_id):
 
                     response_start = codepipeline.start_pipeline_execution(name=pipeline['name'])
 
-                    logger.info('Pipeline execution started with executionId: {}'.format(response_start['pipelineExecutionId']))
+                    logger.info(
+                        f"Pipeline execution started with executionId: {response_start['pipelineExecutionId']}"
+                    )
+
 
                     restarted = True
 
@@ -730,21 +735,23 @@ def update() -> bool:
         all_campaigns_active = True
         for solution_conf in dataset_group_conf.get('solutions', []):
             _,sv_created = create_solution_version(dataset_group_conf['arn'], solution_conf)
-            if sv_created:
+            if (
+                not sv_created
+                and solution_conf.get('solutionVersionStatus') == 'ACTIVE'
+                and (campaign_conf := solution_conf.get('campaign'))
+            ):
+                _,campaign_created = create_campaign(solution_conf, campaign_conf)
+                if campaign_created or campaign_conf['status'] != 'ACTIVE':
+                    all_campaigns_active = False
+            elif (
+                sv_created
+                or solution_conf.get('solutionVersionStatus') != 'ACTIVE'
+                or (campaign_conf := solution_conf.get('campaign'))
+            ):
                 all_svs_active = False
-            elif solution_conf.get('solutionVersionStatus') == 'ACTIVE':
-                campaign_conf = solution_conf.get('campaign')
-                if campaign_conf:
-                    _,campaign_created = create_campaign(solution_conf, campaign_conf)
-                    if campaign_created or campaign_conf['status'] != 'ACTIVE':
-                        all_campaigns_active = False
-            else:
-                all_svs_active = False
-
         # Create event tracker
         event_tracker_active = True
-        event_tracker_conf  = dataset_group_conf.get('eventTracker')
-        if event_tracker_conf:
+        if event_tracker_conf := dataset_group_conf.get('eventTracker'):
             _,event_tracker_created = create_event_tracker(dataset_group_conf['arn'], event_tracker_conf)
             if event_tracker_created:
                 event_tracker_active = False
@@ -764,29 +771,32 @@ def update() -> bool:
                     ssm.put_parameter(
                         Name=filter_conf['param'],
                         Description=filter_conf['paramDescription'],
-                        Value='{}'.format(filter_conf['arn']),
+                        Value=f"{filter_conf['arn']}",
                         Type='String',
-                        Overwrite=True
+                        Overwrite=True,
                     )
+
             for recommender_conf in dataset_group_conf.get('recommenders', []):
                 if recommender_conf.get('param'):
                     ssm.put_parameter(
                         Name=recommender_conf['param'],
                         Description=recommender_conf['paramDescription'],
-                        Value='{}'.format(recommender_conf['arn']),
+                        Value=f"{recommender_conf['arn']}",
                         Type='String',
-                        Overwrite=True
+                        Overwrite=True,
                     )
+
             for solution_conf in dataset_group_conf.get('solutions', []):
                 campaign_conf = solution_conf.get('campaign')
                 if campaign_conf and campaign_conf.get('param'):
                     ssm.put_parameter(
                         Name=campaign_conf['param'],
                         Description=campaign_conf['paramDescription'],
-                        Value='{}'.format(campaign_conf['arn']),
+                        Value=f"{campaign_conf['arn']}",
                         Type='String',
-                        Overwrite=True
+                        Overwrite=True,
                     )
+
         else:
             # More waiting required.
             done = False
@@ -824,9 +834,10 @@ def poll_delete(event, context) -> bool:
      """
 
     try:
-        dataset_group_names = []
-        for dataset_group_conf in dataset_group_confs:
-            dataset_group_names.append(dataset_group_conf['name'])
+        dataset_group_names = [
+            dataset_group_conf['name']
+            for dataset_group_conf in dataset_group_confs
+        ]
 
         delete_dataset_groups(dataset_group_names, region, wait_for_resources = False)
 
@@ -891,8 +902,7 @@ def lambda_handler(event, context):
     ## Inspect the event - if it is coming from EventBridge then it is polling after reset
     ## If it is coming from CloudFormation then use the helper to create or tear down
     if "source" in event and event["source"] == "aws.events":
-        done = update()
-        if done:
+        if done := update():
             logger.info('All work completed; disabling event rule')
             disable_event_rule(lambda_event_rule_name)
             return {

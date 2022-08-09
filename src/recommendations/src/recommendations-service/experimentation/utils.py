@@ -18,9 +18,6 @@ class CompatEncoder(json.JSONEncoder):
         elif isinstance(obj, np.ndarray):
             return obj.tolist()
         elif isinstance(obj, decimal.Decimal):
-            if obj % 1 > 0:
-                return float(obj)
-            else:
-                return int(obj)
+            return float(obj) if obj % 1 > 0 else int(obj)
         else:
             return super(CompatEncoder, self).default(obj)
